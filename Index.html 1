@@ -1,0 +1,472 @@
+DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tic Tac Toe with Chat (P2P)</title>
+    <!-- PeerJS Library for direct peer-to-peer connection without backend server -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: #121214;
+            color: #e1e1e6;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top Header / Connection Panel */
+        .header {
+            background-color: #1a1a1e;
+            padding: 12px;
+            text-align: center;
+            border-bottom: 1px solid #29292e;
+        }
+
+        .header h1 {
+            font-size: 16pt;
+            color: #4da6ff;
+            margin-bottom: 6px;
+        }
+
+        .link-container {
+            font-size: 10pt;
+            background: #202024;
+            padding: 8px;
+            border-radius: 6px;
+            word-break: break-all;
+            margin-top: 5px;
+            border: 1px solid #323238;
+        }
+
+        .btn {
+            background-color: #4da6ff;
+            color: #121214;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-top: 5px;
+            cursor: pointer;
+            font-size: 9pt;
+        }
+
+        .btn:active {
+            background-color: #3580cc;
+        }
+
+        .status-bar {
+            background-color: #29292e;
+            padding: 6px;
+            text-align: center;
+            font-size: 11pt;
+            font-weight: bold;
+            color: #ffca28;
+        }
+
+        /* Game Zone (Top Section) */
+        .game-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            background-color: #121214;
+            min-height: 260px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 8px;
+            width: 240px;
+            height: 240px;
+        }
+
+        .cell {
+            background-color: #202024;
+            border: 2px solid #29292e;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 28pt;
+            font-weight: bold;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .cell:active {
+            background-color: #29292e;
+        }
+
+        .cell.X { color: #ff5555; }
+        .cell.O { color: #50fa7b; }
+
+        /* Chat Zone (Bottom Section) */
+        .chat-container {
+            height: 220px;
+            background-color: #1a1a1e;
+            border-top: 1px solid #29292e;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .msg {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 10pt;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .msg.system {
+            background: transparent;
+            color: #8b8d99;
+            align-self: center;
+            font-style: italic;
+            font-size: 9pt;
+        }
+
+        .msg.me {
+            background-color: #0084ff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg.peer {
+            background-color: #29292e;
+            color: #e1e1e6;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 8px;
+            background-color: #202024;
+            border-top: 1px solid #29292e;
+        }
+
+        .chat-input {
+            flex: 1;
+            background-color: #121214;
+            border: 1px solid #323238;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            outline: none;
+            font-size: 10pt;
+        }
+
+        .chat-send-btn {
+            background-color: #50fa7b;
+            color: #121214;
+            border: none;
+            padding: 0 16px;
+            border-radius: 20px;
+            margin-left: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Panel -->
+    <div class="header">
+        <h1>Tic Tac Toe Live</h1>
+        <div id="setup-panel">
+            <p id="loading-status">Connecting to network...</p>
+            <div id="link-box" style="display:none;">
+                <p>Apna link Player 2 ko bhejein:</p>
+                <div class="link-container" id="share-link">Generating link...</div>
+                <button class="btn" onclick="copyLink()">Copy Link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Turn Status Bar -->
+    <div class="status-bar" id="game-status">Waiting for Player 2...</div>
+
+    <!-- Game Board (Top half-ish) -->
+    <div class="game-container">
+        <div class="board" id="board">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+    </div>
+
+    <!-- Chat Box (Bottom half) -->
+    <div class="chat-container">
+        <div class="chat-messages" id="chat-messages">
+            <div class="msg system">Welcome! Link share karke game shuru karein.</div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." disabled>
+            <button id="send-btn" class="chat-send-btn" onclick="sendMessage()" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        let mySign = 'X'; 
+        let peerSign = 'O';
+        let isMyTurn = false;
+        let boardState = ["", "", "", "", "", "", "", "", ""];
+        let gameActive = false;
+
+        const boardEl = document.getElementById('board');
+        const cells = document.querySelectorAll('.cell');
+        const gameStatusEl = document.getElementById('game-status');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const shareLinkEl = document.getElementById('share-link');
+        const linkBox = document.getElementById('link-box');
+        const loadingStatus = document.getElementById('loading-status');
+
+        // Check if URL has a peer ID (Player 2 joining)
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetPeerId = urlParams.get('room');
+
+        if (targetPeerId) {
+            // Player 2 actions
+            mySign = 'O';
+            peerSign = 'X';
+            isMyTurn = false;
+            initPeer(null); 
+        } else {
+            // Player 1 actions
+            mySign = 'X';
+            peerSign = 'O';
+            isMyTurn = true;
+            initPeer(null);
+        }
+
+        function initPeer(forcedId) {
+            peer = new Peer();
+
+            peer.on('open', (id) => {
+                loadingStatus.style.display = 'none';
+                if (!targetPeerId) {
+                    // Player 1 setup link
+                    const gameLink = window.location.origin + window.location.pathname + '?room=' + id;
+                    shareLinkEl.innerText = gameLink;
+                    linkBox.style.display = 'block';
+                    gameStatusEl.innerText = "Waiting for Player 2 to join...";
+                } else {
+                    // Player 2 connects directly to Player 1
+                    gameStatusEl.innerText = "Connecting to Player 1...";
+                    connectToPeer(targetPeerId);
+                }
+            });
+
+            // Player 1 receiving incoming connection
+            peer.on('connection', (incomingConn) => {
+                if (!conn) {
+                    conn = incomingConn;
+                    setupConnectionHandlers();
+                    document.getElementById('setup-panel').style.display = 'none';
+                    appendSystemMessage("Player 2 connected! Game Started.");
+                    gameActive = true;
+                    updateStatusText();
+                    enableChat();
+                }
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                appendSystemMessage("Error: Connection failed.");
+            });
+        }
+
+        function connectToPeer(id) {
+            conn = peer.connect(id);
+            setupConnectionHandlers();
+        }
+
+        function setupConnectionHandlers() {
+            conn.on('open', () => {
+                document.getElementById('setup-panel').style.display = 'none';
+                appendSystemMessage("Connected to rival! Game Started.");
+                gameActive = true;
+                updateStatusText();
+                enableChat();
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'move') {
+                    handleRemoteMove(data.index);
+                } else if (data.type === 'chat') {
+                    appendMessage(data.text, 'peer');
+                }
+            });
+
+            conn.on('close', () => {
+                appendSystemMessage("Opponent disconnected.");
+                gameActive = false;
+                gameStatusEl.innerText = "Game Over - Partner left.";
+                disableChat();
+            });
+        }
+
+        // Cell Click Handler
+        cells.forEach(cell => {
+            cell.addEventListener('click', () => {
+                const index = cell.getAttribute('data-index');
+                if (!gameActive || !isMyTurn || boardState[index] !== "") return;
+
+                // Make local move
+                boardState[index] = mySign;
+                cell.innerText = mySign;
+                cell.classList.add(mySign);
+
+                // Send move to peer
+                conn.send({ type: 'move', index: index });
+
+                // Check win/draw
+                if (checkWin(mySign)) {
+                    gameStatusEl.innerText = "You Win! 🎉";
+                    gameActive = false;
+                    return;
+                }
+                if (boardState.every(c => c !== "")) {
+                    gameStatusEl.innerText = "Match Draw! 🤝";
+                    gameActive = false;
+                    return;
+                }
+
+                isMyTurn = false;
+                updateStatusText();
+            });
+        });
+
+        function handleRemoteMove(index) {
+            boardState[index] = peerSign;
+            const cell = cells[index];
+            cell.innerText = peerSign;
+            cell.classList.add(peerSign);
+
+            if (checkWin(peerSign)) {
+                gameStatusEl.innerText = "Opponent Wins! 😢";
+                gameActive = false;
+                return;
+            }
+            if (boardState.every(c => c !== "")) {
+                gameStatusEl.innerText = "Match Draw! 🤝";
+                gameActive = false;
+                return;
+            }
+
+            isMyTurn = true;
+            updateStatusText();
+        }
+
+        function updateStatusText() {
+            if (!gameActive) return;
+            if (isMyTurn) {
+                gameStatusEl.innerText = "Aapki Turn Hai (" + mySign + ")";
+                gameStatusEl.style.color = "#50fa7b";
+            } else {
+                gameStatusEl.innerText = "Opponent Ki Turn Hai...";
+                gameStatusEl.style.color = "#ffca28";
+            }
+        }
+
+        const winPatterns = [
+            [0,1,2], [3,4,5], [6,7,8], // Rows
+            [0,3,6], [1,4,7], [2,5,8], // Cols
+            [0,4,8], [2,4,6]           // Diagonals
+        ];
+
+        function checkWin(sign) {
+            return winPatterns.some(pattern => {
+                return pattern.every(index => boardState[index] === sign);
+            });
+        }
+
+        // Chat Logic
+        function enableChat() {
+            chatInput.disabled = false;
+            sendBtn.disabled = false;
+        }
+
+        function disableChat() {
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+        }
+
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || !conn) return;
+
+            conn.send({ type: 'chat', text: text });
+            appendMessage(text, 'me');
+            chatInput.value = '';
+        }
+
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('msg', sender);
+            msgDiv.innerText = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function appendSystemMessage(text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('msg', 'system');
+            msgDiv.innerText = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function copyLink() {
+            const linkText = shareLinkEl.innerText;
+            navigator.clipboard.writeText(linkText).then(() => {
+                alert("Link copied! Ab ise apne dost ko WhatsApp ya kahin bhi send karein.");
+            }).catch(err => {
+                alert("Copy failed, direct select karke copy karein.");
+            });
+        }
+
+        // Input enter key handling
+        chatInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
